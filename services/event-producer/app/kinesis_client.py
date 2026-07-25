@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any
 
@@ -16,11 +17,14 @@ class KinesisPublisher:
 
         self.stream_name = config.stream_name
         self.stream_shard_count = config.stream_shard_count
-        self.client = boto3.client(
-            "kinesis",
-            region_name=config.aws_region,
-            endpoint_url=config.aws_endpoint_url,
-        )
+        client_kwargs = {
+            "region_name": config.aws_region,
+            "endpoint_url": config.aws_endpoint_url,
+        }
+        if config.aws_endpoint_url:
+            client_kwargs["aws_access_key_id"] = os.getenv("AWS_ACCESS_KEY_ID", "test")
+            client_kwargs["aws_secret_access_key"] = os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+        self.client = boto3.client("kinesis", **client_kwargs)
         if config.auto_create_stream:
             self._ensure_stream()
 
@@ -38,10 +42,13 @@ class KinesisPublisher:
         try:
             self.client.describe_stream_summary(StreamName=self.stream_name)
         except self.client.exceptions.ResourceNotFoundException:
-            self.client.create_stream(
-                StreamName=self.stream_name,
-                ShardCount=self.stream_shard_count,
-            )
+            try:
+                self.client.create_stream(
+                    StreamName=self.stream_name,
+                    ShardCount=self.stream_shard_count,
+                )
+            except self.client.exceptions.ResourceInUseException:
+                pass
 
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:

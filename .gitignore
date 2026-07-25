@@ -12,9 +12,11 @@ htmlcov/
 .terraform/
 *.tfstate
 *.tfstate.*
+infra/terraform/envs/*/*.zip
 
 target/
 dbt_packages/
+dbt/package-lock.yml
 logs/
 
 *.egg-info/

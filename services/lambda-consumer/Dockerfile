@@ -10,8 +10,8 @@ RUN addgroup -S app && adduser -S app -G app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=app:app app ./app
+COPY --chown=app:app handler.py local_consumer.py ./
 
 USER app
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "local_consumer.py"]

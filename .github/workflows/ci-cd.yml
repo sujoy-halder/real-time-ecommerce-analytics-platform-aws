@@ -7,7 +7,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  REGISTRY: ghcr.io
+  IMAGE_TAG: ${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
   test-and-validate:
@@ -45,14 +45,14 @@ jobs:
         run: helm lint k8s/helm/ecommerce-streaming
 
       - name: Install dbt
-        run: pip install dbt-snowflake==1.8.3
+        run: pip install dbt-core==1.8.9 dbt-snowflake==1.8.3
 
       - name: dbt deps and parse
         working-directory: dbt
         run: |
           cp profiles.yml.example profiles.yml
           dbt deps
-          dbt parse --profiles-dir .
+          dbt --warn-error parse --no-partial-parse --profiles-dir .
         env:
           SNOWFLAKE_ACCOUNT: example
           SNOWFLAKE_USER: example
@@ -64,28 +64,133 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     needs: test-and-validate
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build producer image
-        run: docker build -t ecommerce-event-producer:${{ github.sha }} services/event-producer
+        run: docker build -t ecommerce-event-producer:${IMAGE_TAG} services/event-producer
 
       - name: Build API image
-        run: docker build -t ecommerce-analytics-api:${{ github.sha }} services/api
+        run: docker build -t ecommerce-analytics-api:${IMAGE_TAG} services/api
 
   deploy-dev:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: docker-build
     environment: dev
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      SNOWFLAKE_URL: ${{ secrets.SNOWFLAKE_URL }}
+      DATABRICKS_SNOWFLAKE_SECRET_SCOPE: ${{ secrets.DATABRICKS_SNOWFLAKE_SECRET_SCOPE }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deployment placeholder
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform apply
+        working-directory: infra/terraform/envs/dev
+        env:
+          TF_VAR_vpc_id: ${{ secrets.AWS_VPC_ID }}
+          TF_VAR_private_subnet_ids: ${{ secrets.AWS_PRIVATE_SUBNET_IDS_JSON }}
+          TF_VAR_snowflake_account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          TF_VAR_snowflake_user: ${{ secrets.SNOWFLAKE_USER }}
+          TF_VAR_snowflake_password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          TF_VAR_snowflake_role: ${{ secrets.SNOWFLAKE_ROLE }}
         run: |
-          echo "terraform apply, helm upgrade, and Databricks job deploy run here after cloud secrets are configured."
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=ecommerce-analytics/dev/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+          terraform apply -auto-approve
+          echo "EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name)" >> "$GITHUB_ENV"
+          echo "KINESIS_STREAM_NAME=$(terraform output -raw kinesis_stream_name)" >> "$GITHUB_ENV"
+          echo "BRONZE_BUCKET_NAME=$(terraform output -raw bronze_bucket_name)" >> "$GITHUB_ENV"
+          echo "PRODUCER_ECR_REPOSITORY_URL=$(terraform output -raw producer_ecr_repository_url)" >> "$GITHUB_ENV"
+          echo "API_ECR_REPOSITORY_URL=$(terraform output -raw api_ecr_repository_url)" >> "$GITHUB_ENV"
+          echo "SNOWFLAKE_DATABASE=$(terraform output -raw snowflake_database)" >> "$GITHUB_ENV"
+          echo "SNOWFLAKE_WAREHOUSE=$(terraform output -raw snowflake_warehouse)" >> "$GITHUB_ENV"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push deployment images
+        run: |
+          docker build -t "${PRODUCER_ECR_REPOSITORY_URL}:${IMAGE_TAG}" services/event-producer
+          docker build -t "${API_ECR_REPOSITORY_URL}:${IMAGE_TAG}" services/api
+          docker push "${PRODUCER_ECR_REPOSITORY_URL}:${IMAGE_TAG}"
+          docker push "${API_ECR_REPOSITORY_URL}:${IMAGE_TAG}"
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Deploy producer and API to EKS
+        run: |
+          helm upgrade --install ecommerce k8s/helm/ecommerce-streaming \
+            --namespace ecommerce --create-namespace \
+            --set global.environment=dev \
+            --set global.awsRegion="${AWS_REGION}" \
+            --set global.kinesisStreamName="${KINESIS_STREAM_NAME}" \
+            --set producer.image.repository="${PRODUCER_ECR_REPOSITORY_URL}" \
+            --set producer.image.tag="${IMAGE_TAG}" \
+            --set api.image.repository="${API_ECR_REPOSITORY_URL}" \
+            --set api.image.tag="${IMAGE_TAG}"
+
+      - name: Set up Databricks CLI
+        if: env.DATABRICKS_HOST != '' && env.DATABRICKS_TOKEN != '' && env.SNOWFLAKE_URL != '' && env.DATABRICKS_SNOWFLAKE_SECRET_SCOPE != ''
+        uses: databricks/setup-cli@main
+
+      - name: Deploy Databricks job
+        if: env.DATABRICKS_HOST != '' && env.DATABRICKS_TOKEN != '' && env.SNOWFLAKE_URL != '' && env.DATABRICKS_SNOWFLAKE_SECRET_SCOPE != ''
+        working-directory: databricks
+        env:
+          BUNDLE_VAR_bronze_path: s3://${{ env.BRONZE_BUCKET_NAME }}/events
+          BUNDLE_VAR_checkpoint_path: s3://${{ env.BRONZE_BUCKET_NAME }}/checkpoints/ecommerce-streaming
+          BUNDLE_VAR_snowflake_url: ${{ env.SNOWFLAKE_URL }}
+          BUNDLE_VAR_snowflake_database: ${{ env.SNOWFLAKE_DATABASE }}
+          BUNDLE_VAR_snowflake_warehouse: ${{ env.SNOWFLAKE_WAREHOUSE }}
+          BUNDLE_VAR_snowflake_secret_scope: ${{ env.DATABRICKS_SNOWFLAKE_SECRET_SCOPE }}
+        run: databricks bundle deploy --target dev
+
+      - name: Set up Python for dbt
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt
+        run: pip install dbt-core==1.8.9 dbt-snowflake==1.8.3
+
+      - name: Run dbt models and tests
+        working-directory: dbt
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_DATABASE: ${{ env.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_WAREHOUSE: ${{ env.SNOWFLAKE_WAREHOUSE }}
+        run: |
+          cp profiles.yml.example profiles.yml
+          dbt deps
+          dbt run --profiles-dir . --select marts
+          dbt test --profiles-dir . --select marts

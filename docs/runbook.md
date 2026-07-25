@@ -8,10 +8,16 @@ Start the local stack:
 docker compose up --build
 ```
 
-The Docker producer creates the local Kinesis stream automatically. To also create the local Bronze S3 bucket for Lambda testing:
+The Docker producer and local consumer create the local Kinesis stream and Bronze S3 bucket automatically. To bootstrap them manually:
 
 ```bash
 python scripts/bootstrap_localstack.py
+```
+
+Check that local events reached the Bronze bucket:
+
+```bash
+python scripts/check_local_bronze.py
 ```
 
 Run Python service tests:
@@ -33,6 +39,12 @@ terraform plan
 ```
 
 Required variables include AWS region, environment name, Snowflake account information, and Kubernetes settings.
+
+For GitHub Actions deployment, set `AWS_PRIVATE_SUBNET_IDS_JSON` as a Terraform-compatible JSON list, for example:
+
+```json
+["subnet-aaa111", "subnet-bbb222"]
+```
 
 ## dbt
 

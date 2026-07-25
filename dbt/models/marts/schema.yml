@@ -5,48 +5,47 @@ models:
     description: Daily customer order facts loaded from Databricks Gold.
     columns:
       - name: order_fact_id
-        tests:
+        data_tests:
           - unique
           - not_null
       - name: customer_id
-        tests:
+        data_tests:
           - not_null
       - name: gross_revenue
-        tests:
+        data_tests:
           - not_null
 
   - name: fact_payments
     description: Daily customer payment facts loaded from Databricks Gold.
     columns:
       - name: payment_fact_id
-        tests:
+        data_tests:
           - unique
           - not_null
       - name: customer_id
-        tests:
+        data_tests:
           - not_null
 
   - name: dim_customers
     columns:
       - name: customer_id
-        tests:
+        data_tests:
           - unique
           - not_null
 
   - name: dim_products
     columns:
       - name: product_id
-        tests:
+        data_tests:
           - unique
           - not_null
 
   - name: customer_lifetime_value
     columns:
       - name: customer_id
-        tests:
+        data_tests:
           - unique
           - not_null
       - name: lifetime_value
-        tests:
+        data_tests:
           - not_null
-

@@ -21,6 +21,13 @@ module "kinesis" {
   tags         = local.tags
 }
 
+module "ecr" {
+  source       = "../../modules/ecr"
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.tags
+}
+
 module "iam" {
   source             = "../../modules/iam"
   project_name       = var.project_name
@@ -30,12 +37,26 @@ module "iam" {
   tags               = local.tags
 }
 
+module "lambda" {
+  source             = "../../modules/lambda"
+  project_name       = var.project_name
+  environment        = var.environment
+  lambda_role_arn    = module.iam.lambda_role_arn
+  kinesis_stream_arn = module.kinesis.stream_arn
+  bronze_bucket_name = module.s3.bronze_bucket_name
+  source_file        = abspath("${path.root}/../../../../services/lambda-consumer/handler.py")
+  tags               = local.tags
+
+  depends_on = [module.iam]
+}
+
 module "eks" {
   source             = "../../modules/eks"
   project_name       = var.project_name
   environment        = var.environment
   vpc_id             = var.vpc_id
   private_subnet_ids = var.private_subnet_ids
+  kinesis_stream_arn = module.kinesis.stream_arn
   tags               = local.tags
 }
 
@@ -50,7 +71,6 @@ module "monitoring" {
   project_name         = var.project_name
   environment          = var.environment
   kinesis_stream_name  = module.kinesis.stream_name
-  lambda_function_name = "${var.project_name}-${var.environment}-kinesis-to-s3"
+  lambda_function_name = module.lambda.function_name
   tags                 = local.tags
 }
-

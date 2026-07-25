@@ -1,0 +1,11 @@
+project_name       = "ecommerce-analytics"
+environment        = "dev"
+aws_region         = "us-east-1"
+vpc_id             = "vpc-0123456789abcdef0"
+private_subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
+
+snowflake_account  = "your-account"
+snowflake_user     = "your-user"
+snowflake_password = "your-password"
+snowflake_role     = "SYSADMIN"
+

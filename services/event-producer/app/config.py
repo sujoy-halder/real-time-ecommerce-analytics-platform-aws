@@ -20,7 +20,7 @@ class ProducerConfig:
         return cls(
             stream_name=os.getenv("KINESIS_STREAM_NAME", "ecommerce-events-dev"),
             aws_region=os.getenv("AWS_REGION", "us-east-1"),
-            aws_endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
+            aws_endpoint_url=os.getenv("AWS_ENDPOINT_URL") or None,
             interval_seconds=float(os.getenv("PRODUCER_INTERVAL_SECONDS", "1.0")),
             batch_size=int(os.getenv("PRODUCER_BATCH_SIZE", "10")),
             mode=os.getenv("PRODUCER_MODE", "continuous"),

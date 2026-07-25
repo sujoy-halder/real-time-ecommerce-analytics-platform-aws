@@ -4,19 +4,33 @@ services:
     ports:
       - "4566:4566"
     environment:
-      SERVICES: kinesis,s3,cloudwatch,lambda
+      SERVICES: kinesis,s3,cloudwatch
       AWS_DEFAULT_REGION: us-east-1
       DEBUG: "0"
     volumes:
       - localstack-data:/var/lib/localstack
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4566/_localstack/health', timeout=10)",
+        ]
+      interval: 5s
+      timeout: 15s
+      retries: 20
 
   event-producer:
     build:
       context: ./services/event-producer
     depends_on:
-      - localstack
+      localstack:
+        condition: service_healthy
     environment:
       AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
       AWS_ENDPOINT_URL: http://localstack:4566
       KINESIS_STREAM_NAME: ecommerce-events-dev
       AUTO_CREATE_STREAM: "true"
@@ -24,6 +38,24 @@ services:
       PRODUCER_INTERVAL_SECONDS: "0.25"
       PRODUCER_BATCH_SIZE: "10"
       PRODUCER_MODE: continuous
+
+  local-consumer:
+    build:
+      context: ./services/lambda-consumer
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_ENDPOINT_URL: http://localstack:4566
+      KINESIS_STREAM_NAME: ecommerce-events-dev
+      KINESIS_SHARD_COUNT: "2"
+      BRONZE_BUCKET: ecommerce-bronze-dev
+      AUTO_CREATE_STREAM: "true"
+      AUTO_CREATE_BUCKET: "true"
+      CONSUMER_POLL_SECONDS: "1.0"
 
   api:
     build:

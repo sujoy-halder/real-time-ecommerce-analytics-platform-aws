@@ -3,13 +3,15 @@ resources:
     ecommerce_streaming_pipeline:
       name: ecommerce-streaming-pipeline
       max_concurrent_runs: 1
+      continuous:
+        pause_status: UNPAUSED
       tasks:
         - task_key: bronze_silver_gold_streaming
           notebook_task:
-            notebook_path: ../notebooks/streaming_etl.py
+            notebook_path: ${workspace.file_path}/notebooks/streaming_etl.py
             base_parameters:
-              bronze_path: s3://ecommerce-analytics-dev-bronze/events
-              checkpoint_path: s3://ecommerce-analytics-dev-bronze/checkpoints/ecommerce-streaming
+              bronze_path: ${var.bronze_path}
+              checkpoint_path: ${var.checkpoint_path}
               catalog: ecommerce_analytics
               schema: lakehouse
           job_cluster_key: streaming_cluster
@@ -21,4 +23,33 @@ resources:
             autoscale:
               min_workers: 2
               max_workers: 8
-
+    ecommerce_gold_to_snowflake_loader:
+      name: ecommerce-gold-to-snowflake-loader
+      schedule:
+        quartz_cron_expression: 0 0 * * * ?
+        timezone_id: UTC
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: load_gold_to_snowflake
+          notebook_task:
+            notebook_path: ${workspace.file_path}/notebooks/snowflake_gold_loader.py
+            base_parameters:
+              catalog: ecommerce_analytics
+              schema: lakehouse
+              sf_url: ${var.snowflake_url}
+              sf_database: ${var.snowflake_database}
+              sf_schema: RAW
+              sf_warehouse: ${var.snowflake_warehouse}
+              sf_secret_scope: ${var.snowflake_secret_scope}
+          job_cluster_key: snowflake_loader_cluster
+          libraries:
+            - maven:
+                coordinates: net.snowflake:spark-snowflake_2.12:3.2.1-spark_3.5
+      job_clusters:
+        - job_cluster_key: snowflake_loader_cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: i3.xlarge
+            autoscale:
+              min_workers: 1
+              max_workers: 4

@@ -1,6 +1,8 @@
 locals {
-  bucket_prefix = lower(replace("${var.project_name}-${var.environment}", "_", "-"))
+  bucket_prefix = lower(replace("${var.project_name}-${var.environment}-${data.aws_caller_identity.current.account_id}", "_", "-"))
 }
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "bronze" {
   bucket        = "${local.bucket_prefix}-bronze"
@@ -86,4 +88,3 @@ resource "aws_s3_bucket_lifecycle_configuration" "bronze" {
     }
   }
 }
-

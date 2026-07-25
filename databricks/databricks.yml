@@ -1,0 +1,32 @@
+bundle:
+  name: ecommerce-analytics-platform
+
+variables:
+  bronze_path:
+    description: S3 Bronze event path produced by Terraform.
+    default: s3://ecommerce-analytics-dev-bronze/events
+  checkpoint_path:
+    description: Streaming checkpoint path in the Bronze bucket.
+    default: s3://ecommerce-analytics-dev-bronze/checkpoints/ecommerce-streaming
+  snowflake_url:
+    description: Snowflake account URL used by the Databricks Snowflake connector.
+  snowflake_database:
+    description: Snowflake database produced by Terraform.
+    default: ECOMMERCE_ANALYTICS_DEV
+  snowflake_warehouse:
+    description: Snowflake warehouse produced by Terraform.
+    default: ECOMMERCE_ANALYTICS_DEV_WH
+  snowflake_secret_scope:
+    description: Databricks secret scope containing Snowflake credentials.
+    default: ecommerce
+
+include:
+  - jobs/*.yml
+
+sync:
+  include:
+    - notebooks/*.py
+
+targets:
+  dev:
+    mode: development
