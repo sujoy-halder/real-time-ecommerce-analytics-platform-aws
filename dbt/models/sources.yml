@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: lakehouse_gold
+    database: "{{ env_var('SNOWFLAKE_DATABASE', 'ECOMMERCE_ANALYTICS_DEV') }}"
+    schema: RAW
+    tables:
+      - name: gold_customer_orders_daily
+        config:
+          loaded_at_field: _updated_at
+          freshness:
+            warn_after:
+              count: 2
+              period: hour
+            error_after:
+              count: 6
+              period: hour
+      - name: gold_customer_payments_daily
+        config:
+          loaded_at_field: _updated_at
+      - name: silver_events
+        config:
+          loaded_at_field: _ingested_at

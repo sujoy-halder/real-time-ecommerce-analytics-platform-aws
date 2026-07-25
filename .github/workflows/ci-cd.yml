@@ -1,0 +1,91 @@
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  AWS_REGION: us-east-1
+  REGISTRY: ghcr.io
+
+jobs:
+  test-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test Python services
+        run: python scripts/run_tests.py
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: Terraform init
+        working-directory: infra/terraform/envs/dev
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: infra/terraform/envs/dev
+        run: terraform validate
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint k8s/helm/ecommerce-streaming
+
+      - name: Install dbt
+        run: pip install dbt-snowflake==1.8.3
+
+      - name: dbt deps and parse
+        working-directory: dbt
+        run: |
+          cp profiles.yml.example profiles.yml
+          dbt deps
+          dbt parse --profiles-dir .
+        env:
+          SNOWFLAKE_ACCOUNT: example
+          SNOWFLAKE_USER: example
+          SNOWFLAKE_PASSWORD: example
+          SNOWFLAKE_ROLE: TRANSFORMER
+          SNOWFLAKE_DATABASE: ECOMMERCE_ANALYTICS_DEV
+          SNOWFLAKE_WAREHOUSE: ECOMMERCE_ANALYTICS_DEV_WH
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test-and-validate
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build producer image
+        run: docker build -t ecommerce-event-producer:${{ github.sha }} services/event-producer
+
+      - name: Build API image
+        run: docker build -t ecommerce-analytics-api:${{ github.sha }} services/api
+
+  deploy-dev:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: docker-build
+    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deployment placeholder
+        run: |
+          echo "terraform apply, helm upgrade, and Databricks job deploy run here after cloud secrets are configured."

@@ -1,0 +1,36 @@
+source:
+  type: snowflake
+  serviceName: ecommerce_snowflake
+  serviceConnection:
+    config:
+      type: Snowflake
+      username: ${SNOWFLAKE_USER}
+      password: ${SNOWFLAKE_PASSWORD}
+      account: ${SNOWFLAKE_ACCOUNT}
+      warehouse: ${SNOWFLAKE_WAREHOUSE}
+      database: ${SNOWFLAKE_DATABASE}
+      role: ${SNOWFLAKE_ROLE}
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+      includeTables: true
+      includeViews: true
+      markDeletedTables: true
+processor:
+  type: orm-profiler
+  config: {}
+sink:
+  type: metadata-rest
+  config:
+    api_endpoint: ${OPENMETADATA_API_ENDPOINT}
+    auth_provider_type: openmetadata
+    security_config:
+      jwt_token: ${OPENMETADATA_JWT_TOKEN}
+workflowConfig:
+  loggerLevel: INFO
+  openMetadataServerConfig:
+    hostPort: ${OPENMETADATA_API_ENDPOINT}
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OPENMETADATA_JWT_TOKEN}
+

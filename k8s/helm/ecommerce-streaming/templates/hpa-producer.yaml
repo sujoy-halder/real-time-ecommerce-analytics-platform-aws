@@ -1,0 +1,24 @@
+{{- if .Values.producer.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ecommerce-streaming.fullname" . }}-producer
+  labels:
+    {{- include "ecommerce-streaming.labels" . | nindent 4 }}
+    app.kubernetes.io/component: producer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ecommerce-streaming.fullname" . }}-producer
+  minReplicas: {{ .Values.producer.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.producer.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.producer.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+

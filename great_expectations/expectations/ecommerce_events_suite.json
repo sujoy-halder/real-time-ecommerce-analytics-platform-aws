@@ -1,0 +1,48 @@
+{
+  "expectation_suite_name": "ecommerce_events_suite",
+  "meta": {
+    "notes": "Quality checks for Silver e-commerce events loaded from Databricks into Snowflake."
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "event_id"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {
+        "column": "event_id"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "event_time"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "event_type",
+        "value_set": [
+          "order_created",
+          "cart_updated",
+          "product_viewed",
+          "payment_authorized",
+          "customer_session_started",
+          "shipment_status_changed"
+        ]
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "customer_id",
+        "regex": "^cust_[0-9]{6}$"
+      }
+    }
+  ]
+}
+

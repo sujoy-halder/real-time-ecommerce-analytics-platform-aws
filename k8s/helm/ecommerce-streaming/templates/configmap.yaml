@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ecommerce-streaming.fullname" . }}-config
+  labels:
+    {{- include "ecommerce-streaming.labels" . | nindent 4 }}
+data:
+  AWS_REGION: {{ .Values.global.awsRegion | quote }}
+  AWS_ENDPOINT_URL: {{ .Values.global.awsEndpointUrl | quote }}
+  KINESIS_STREAM_NAME: {{ .Values.global.kinesisStreamName | quote }}
+  PRODUCER_INTERVAL_SECONDS: {{ .Values.producer.intervalSeconds | quote }}
+  PRODUCER_BATCH_SIZE: {{ .Values.producer.batchSize | quote }}
+  PRODUCER_MODE: "continuous"
+

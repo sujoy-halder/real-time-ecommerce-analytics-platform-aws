@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ecommerce-streaming.fullname" . }}-producer
+  labels:
+    {{- include "ecommerce-streaming.labels" . | nindent 4 }}
+    app.kubernetes.io/component: producer
+spec:
+  replicas: {{ .Values.producer.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "ecommerce-streaming.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: producer
+  template:
+    metadata:
+      labels:
+        {{- include "ecommerce-streaming.labels" . | nindent 8 }}
+        app.kubernetes.io/component: producer
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: {{ include "ecommerce-streaming.serviceAccountName" . }}
+      containers:
+        - name: producer
+          image: "{{ .Values.producer.image.repository }}:{{ .Values.producer.image.tag }}"
+          imagePullPolicy: {{ .Values.producer.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "ecommerce-streaming.fullname" . }}-config
+            {{- if or .Values.secrets.awsAccessKeyId .Values.secrets.awsSecretAccessKey }}
+            - secretRef:
+                name: {{ include "ecommerce-streaming.fullname" . }}-aws
+            {{- end }}
+          resources:
+            {{- toYaml .Values.producer.resources | nindent 12 }}
+

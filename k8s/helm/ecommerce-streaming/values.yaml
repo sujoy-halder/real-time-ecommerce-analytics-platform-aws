@@ -1,0 +1,58 @@
+global:
+  environment: dev
+  awsRegion: us-east-1
+  kinesisStreamName: ecommerce-analytics-dev-events
+  awsEndpointUrl: ""
+
+producer:
+  image:
+    repository: ecommerce-event-producer
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 3
+  intervalSeconds: "0.25"
+  batchSize: "25"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+api:
+  image:
+    repository: ecommerce-analytics-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+ingress:
+  enabled: false
+  className: alb
+  host: analytics.local
+  annotations: {}
+
+secrets:
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""

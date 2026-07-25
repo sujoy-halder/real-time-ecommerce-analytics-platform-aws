@@ -1,0 +1,16 @@
+[project]
+name = "ecommerce-event-producer"
+version = "0.1.0"
+description = "Synthetic e-commerce event producer for Kinesis streaming demos"
+requires-python = ">=3.10"
+dependencies = [
+  "boto3>=1.34.0"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
